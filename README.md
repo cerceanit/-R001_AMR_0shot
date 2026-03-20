@@ -1,23 +1,44 @@
-# Predicting Antimicrobial Resistance Patterns in Kazakhstan Using Zero-Shot Machine Learning
+# Predicting AMR Patterns in Kazakhstan Using Zero-Shot Machine Learning
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Kaggle](https://img.shields.io/badge/Notebook-Kaggle-20BEFF.svg)](https://www.kaggle.com/code/uaisamangeldi/amr-kazakhstan-zeroshot-v2)
-[![medRxiv](https://img.shields.io/badge/Preprint-medRxiv-red.svg)](https://www.medrxiv.org)
 
-> A zero-shot machine learning framework for predicting antimicrobial resistance (AMR) patterns in Kazakhstan — a country with no clinical training data in global surveillance databases — using macroeconomic proxy features as surrogates for local epidemiological context.
+## The Problem
 
----
+Kazakhstan does not have a nationally integrated antimicrobial resistance (AMR) surveillance system. This means there is no local clinical data to train a prediction model on — which is exactly the situation where most machine learning approaches break down.
 
-## Overview
+We wanted to answer a simple question: **can a model trained entirely on data from other countries make useful resistance predictions for Kazakhstan?**
 
-Kazakhstan lacks a nationally integrated AMR surveillance infrastructure, making traditional data-driven models inapplicable. This project trains gradient boosting models on three global AMR surveillance databases (ATLAS, SIDERO-WT, KEYSTONE) enriched with World Bank macroeconomic indicators, then applies the trained model to Kazakhstan in a **zero-shot** setting — the model never sees any Kazakhstani clinical data during training.
+## What We Built
 
-**Key idea:** By excluding country identity from the feature set and replacing it with macroeconomic proxies (GDP per capita, health expenditure, population density), the model characterizes countries through their healthcare infrastructure rather than their names — enabling generalization to countries absent from training data.
+A zero-shot machine learning framework that trains on three global AMR surveillance databases — ATLAS, SIDERO-WT, and KEYSTONE — covering 12.4 million clinical isolate records from 85 countries between 2004 and 2023. Kazakhstan is completely excluded from training.
 
----
+Instead of using country name as a feature (which would make generalization to unseen countries impossible), the model represents each country through its macroeconomic profile: GDP per capita, health expenditure as a percentage of GDP, and population density. These act as proxies for a country's healthcare infrastructure and antibiotic selection pressure. At inference time, Kazakhstan's macroeconomic indicators are plugged in and the model predicts resistance probabilities for six priority pathogens across all antibiotics present in Kazakhstan's antibiotic consumption data.
 
-## Results Summary
+## Methodology
+
+**Data sources**
+
+- ATLAS, SIDERO-WT, KEYSTONE — accessed via formal data request through vivli.org
+- World Bank indicators — GDP per capita, health expenditure % GDP, population density
+- Kazakhstan antibiotic consumption (DDD per 1000 inhabitants per day, 2017–2023) — extracted from published Kazakhstani literature
+
+**Feature set**
+
+Six features: organism, antibiotic, year, GDP per capita, health expenditure (% GDP), population density. Country name and database source are deliberately excluded.
+
+**Training and validation**
+
+Records collected up to and including 2020 form the training set. Records from 2021–2022 form the validation set. An explicit leakage audit confirmed zero isolate ID overlap across all temporal splits.
+
+Three models were compared: Random Forest as a baseline, XGBoost, and LightGBM. Class imbalance (80.4% susceptible / 19.6% resistant) was handled via `scale_pos_weight = 4.09`.
+
+Zero-shot generalizability was assessed using Leave-One-Country-Out (LOCO) validation across six proxy countries chosen for their epidemiological and geographic similarity to Kazakhstan: Russia, Turkey, Mexico, Belarus, Ukraine, and Bulgaria. Russia served as the primary proxy.
+
+A 5-fold rolling temporal cross-validation was run with genuine year-window boundaries — each fold trains on progressively more historical data and validates on the subsequent period — to assess result stability over time.
+
+## Results
 
 | Model | Val AUC | Val AUPRC |
 |---|---|---|
@@ -25,11 +46,13 @@ Kazakhstan lacks a nationally integrated AMR surveillance infrastructure, making
 | XGBoost | 0.8350 | 0.5208 |
 | **LightGBM** | **0.8673** | **0.5816** |
 
-**5-Fold Rolling CV:** Mean AUC 0.8744 ± 0.0126 | Mean AUPRC 0.6617 ± 0.0576
+LightGBM converged at round 1304 with early stopping. The resistant class recall was 0.82 — prioritizing detection of truly resistant isolates over precision, which is the clinically relevant trade-off.
 
-**LOCO Validation (Russia as KZ proxy):** AUC 0.8793
+**LOCO validation** across proxy countries: mean AUC 0.8695, with Russia (the primary Kazakhstan proxy) achieving AUC 0.8793.
 
-**Top Kazakhstan resistance predictions (matched antibiotics):**
+**5-fold rolling CV:** mean AUC 0.8744 ± 0.0126. Performance declined from Fold 1 (AUC 0.895, training on 2004–2006) to Fold 5 (AUC 0.861, training on 2004–2018), suggesting the model captures temporal drift in resistance patterns.
+
+**Top Kazakhstan resistance predictions (matched antibiotics only):**
 
 | Organism | Antibiotic | Predicted Resistance Probability |
 |---|---|---|
@@ -39,151 +62,25 @@ Kazakhstan lacks a nationally integrated AMR surveillance infrastructure, making
 | *Enterococcus faecium* | Gentamicin | 0.962 |
 | *Enterococcus faecium* | Amoxycillin/clavulanate | 0.951 |
 
----
+25 of 41 Kazakhstan antibiotic entries (64.1%) were matched to the global surveillance vocabulary. The remaining 14 were either regionally specific drugs absent from global AMR databases or antibiotics with naming conventions that could not be safely harmonized.
 
-## Repository Structure
-
-```
-amr-kazakhstan-zeroshot/
-│
-├── amr-kazakhstan-zeroshot.ipynb   Main analysis notebook (Kaggle)
-├── README.md                       This file
-├── requirements.txt                Python dependencies
-├── LICENSE                         MIT License
-│
-└── data/
-    └── README.md                   Data sources and access instructions
-```
-
----
-
-## Data Sources
-
-All datasets must be obtained independently. This repository contains no raw data.
-
-| Dataset | Description | Access |
-|---|---|---|
-| ATLAS | Global AMR surveillance (Pfizer, 2004–2023) | [vivli.org](https://vivli.org) — formal data request required |
-| SIDERO-WT | Global AMR surveillance (Shionogi) | [vivli.org](https://vivli.org) — formal data request required |
-| KEYSTONE | Global AMR surveillance | [vivli.org](https://vivli.org) — formal data request required |
-| World Bank — Global Macro | GDP per capita, health expenditure % GDP, population density | [data.worldbank.org](https://data.worldbank.org) — free download |
-| World Bank — Kazakhstan Macro | Kazakhstan-specific indicators | [data.worldbank.org](https://data.worldbank.org) — free download |
-| Kazakhstan DID | Antibiotic consumption (DDD/1000/day, 2017–2023) | Extracted from published literature (see paper) |
-
-World Bank indicator codes used:
-- `NY.GDP.PCAP.CD` — GDP per capita (current USD)
-- `SH.XPD.CHEX.GD.ZS` — Current health expenditure (% of GDP)
-- `EN.POP.DNST` — Population density (people per sq. km)
-
----
-
-## Methods
-
-### Pipeline Overview
-
-```
-ATLAS + SIDERO-WT + KEYSTONE
-         ↓
-   Harmonization & binary encoding (SIR → R=1/S=0/I=discarded)
-         ↓
-   World Bank macro merge (by country × year)
-         ↓
-   Temporal split: Train ≤2020 | Val 2021–2022 | Test >2022
-         ↓
-   Model training (RF / XGBoost / LightGBM)  ← Kazakhstan excluded
-         ↓
-   LOCO validation on proxy countries
-         ↓
-   Zero-shot inference on Kazakhstan
-```
-
-### Feature Set
-
-| Feature | Type | Rationale |
-|---|---|---|
-| Organism | Categorical | Species-level resistance biology |
-| Antibiotic | Categorical | Drug class and mechanism |
-| Year | Numerical | Temporal resistance trends |
-| GDP per capita (USD) | Numerical | Healthcare investment capacity |
-| Health expenditure (% GDP) | Numerical | Healthcare system strength |
-| Population density | Numerical | Transmission and selection pressure |
-
-> **Country name is deliberately excluded** — its presence would prevent zero-shot generalization to unseen countries.
-
-### Zero-Shot Design
-
-The model is trained on 85 countries excluding Kazakhstan. At inference time, Kazakhstan's macroeconomic profile (GDP, health expenditure, population density) and antibiotic consumption data (DDD/1000/day) are used as inputs. The model generalizes based on country characteristics rather than country identity.
-
-LOCO (Leave-One-Country-Out) validation on Russia, Turkey, Mexico, Belarus, Ukraine, and Bulgaria provides indirect evidence of zero-shot generalizability before applying to Kazakhstan.
-
----
-
-## Reproducibility
-
-### Environment
-
-```bash
-pip install -r requirements.txt
-```
-
-### Running on Kaggle
-
-The notebook is designed to run on Kaggle with the following datasets attached:
-
-```
-/kaggle/input/atlas-csv/atlas.csv
-/kaggle/input/ddddddd/sidero_wt.xlsx
-/kaggle/input/ddddddd/keystone.xlsx
-/kaggle/input/datasets/uaisamangeldi/macrob/       ← World Bank global macro
-/kaggle/input/datasets/uaisamangeldi/macro-kz/     ← World Bank Kazakhstan macro
-/kaggle/input/datasets/uaisamangeldi/kz-data/      ← Kazakhstan DID
-/kaggle/input/datasets/uaisamangeldi/consumption/  ← Global antibiotic consumption
-```
-
-Enable GPU accelerator in Kaggle Settings for faster training (LightGBM and XGBoost both support CUDA). The notebook includes CPU fallback for all GPU operations.
-
----
+Feature importance analysis showed antibiotic identity and organism species dominate prediction (normalized gain 1.000 and 0.707 respectively). Macroeconomic features contribute at the margin — consistent with their role as country-level proxies rather than direct resistance determinants.
 
 ## Limitations
 
-- Kazakhstan macro data available only 2017–2023; global dataset spans 2004–2023
-- MIC breakpoints use simplified CLSI/EUCAST approximations with a fallback threshold of 8 µg/mL
-- Intermediate (I) SIR category discarded — may discard clinically borderline isolates
-- Of 41 Kazakhstan antibiotic entries, 25 (64.1%) were matched to the global source vocabulary; 14 remained unmatched due to regional drug naming or absence from global surveillance panels
-- Feature importance analysis shows antibiotic identity and organism species dominate prediction (normalized gain > 0.7); macroeconomic features contribute at the margin — the model primarily captures globally conserved resistance relationships
-- LOCO proxy assumption (Russia ≈ Kazakhstan) is imperfect — no proxy country shares an identical epidemiological environment with Kazakhstan
+- Kazakhstan macro data only covers 2017–2023; the global training dataset spans 2004–2023
+- MIC breakpoints use simplified approximations with a fallback threshold of 8 µg/mL
+- Intermediate SIR category was discarded, which may exclude borderline clinical cases
+- 14 Kazakhstan antibiotics (35.9%) could not be matched to the global vocabulary
+- The LOCO proxy assumption (Russia ≈ Kazakhstan) is imperfect — no proxy shares Kazakhstan's exact epidemiological environment
 - No direct validation against Kazakhstan clinical laboratory data was possible
 
----
+## Data Access
 
-## Citation
+This repository contains no raw data. See `data/README.md` for instructions on obtaining each dataset.
 
-If you use this code or findings in your work, please cite:
-
-```bibtex
-@article{uaisamangeldi2025amr,
-  title   = {Predicting Antimicrobial Resistance Patterns in Kazakhstan
-             Using Zero-Shot Machine Learning},
-  author  = {[Author Names]},
-  journal = {medRxiv},
-  year    = {2025},
-  doi     = {[DOI]}
-}
-```
-
----
+ATLAS, SIDERO-WT, and KEYSTONE require a formal data request through [vivli.org](https://vivli.org). World Bank indicators are freely available at [data.worldbank.org](https://data.worldbank.org).
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
-
-The underlying surveillance data (ATLAS, SIDERO-WT, KEYSTONE) is subject to separate data use agreements via [vivli.org](https://vivli.org) and is not redistributed here.
-
----
-
-## Acknowledgements
-
-- ATLAS, SIDERO-WT, and KEYSTONE surveillance data accessed via [vivli.org](https://vivli.org)
-- Macroeconomic data from the [World Bank Open Data](https://data.worldbank.org)
-- Kazakhstan antibiotic consumption data from published literature (Zhussupova et al. 2021; Semenova et al. 2024; Kassym et al. 2025; Lim et al. 2025)
-- Supervised by [Professor Name], Astana IT University
+MIT License — see [LICENSE](LICENSE) for details. The underlying surveillance data is subject to separate data use agreements via vivli.org and is not redistributed here.
