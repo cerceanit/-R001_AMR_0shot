@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Kaggle](https://img.shields.io/badge/Notebook-Kaggle-20BEFF.svg)](https://www.kaggle.com/code/uaisamangeldi/amr-kazakhstan-zeroshot-v2)
+[![Kaggle](https://img.shields.io/badge/Notebook-Kaggle-20BEFF.svg)](https://www.kaggle.com/code/uaisamangeldi/amr-kazakhstan-zeroshot)
 
 ## The Problem
 
